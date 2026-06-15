@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0095D9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="名刺管理">
+<title>名刺管理ツール｜フジ自動車工業</title>
+<style>
+  :root{
+    --blue:#0095D9; --navy:#00467A; --blue-soft:#e7f4fb; --blue-line:#bfe3f5;
+    --bg:#f4f7fa; --card:#ffffff; --ink:#1a2733; --sub:#5b6b78; --line:#e2e8ee;
+    --warn:#e8743b; --danger:#d9445f; --ok:#2faa6a; --soon:#e0a800;
+    --shadow:0 2px 10px rgba(0,40,80,.08); --r:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5;
+    padding-bottom:calc(70px + env(safe-area-inset-bottom));
+  }
+  header.app{
+    position:sticky; top:0; z-index:30; color:#fff;
+    background:linear-gradient(120deg,var(--navy),var(--blue));
+    padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+    display:flex; align-items:center; gap:10px;
+  }
+  header.app .logo{font-weight:800; font-size:18px; letter-spacing:.02em}
+  header.app .logo small{display:block;font-weight:500;font-size:11px;opacity:.85;letter-spacing:.08em}
+  header.app .count{margin-left:auto;font-size:12px;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px}
+  main{max-width:920px; margin:0 auto; padding:14px}
+  .view{display:none; animation:fade .2s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* search */
+  .searchbar{display:flex; gap:8px; margin-bottom:10px}
+  .searchbar input{flex:1; padding:12px 14px; border:1px solid var(--line); border-radius:999px; font-size:15px; background:#fff}
+  .searchbar input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+  .tagrow{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
+  .chip{font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid var(--blue-line);background:#fff;color:var(--navy);cursor:pointer;white-space:nowrap}
+  .chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+  /* card list */
+  .cardlist{display:grid; gap:10px}
+  .meishi{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    box-shadow:var(--shadow); padding:13px 14px; display:flex; gap:12px; cursor:pointer; position:relative;
+  }
+  .meishi:active{transform:scale(.995)}
+  .meishi .thumb{width:54px;height:54px;border-radius:10px;object-fit:cover;background:var(--blue-soft);flex:none;border:1px solid var(--blue-line)}
+  .meishi .thumb.ph{display:flex;align-items:center;justify-content:center;color:var(--blue);font-weight:700;font-size:20px}
+  .meishi .m-main{min-width:0;flex:1}
+  .meishi .m-name{font-weight:700;font-size:16px}
+  .meishi .m-co{font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meishi .m-tags{margin-top:5px;display:flex;gap:5px;flex-wrap:wrap}
+  .meishi .m-tags span{font-size:11px;background:var(--blue-soft);color:var(--navy);padding:2px 8px;border-radius:999px}
+  .flag{position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;color:#fff}
+  .flag.over{background:var(--danger)} .flag.soon{background:var(--soon)}
+  .empty{text-align:center;color:var(--sub);padding:50px 20px}
+  .empty .big{font-size:40px;margin-bottom:8px}
+
+  /* buttons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:11px;
+    padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn.navy{background:var(--navy);color:#fff}
+  .btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--blue-line)}
+  .btn.sub{background:var(--blue-soft);color:var(--navy)}
+  .btn.danger{background:#fff;color:var(--danger);border:1px solid #f0c2cb}
+  .btn.full{width:100%}
+  .btn:active{filter:brightness(.96)}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+
+  /* add view */
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+  .panel h2{margin:0 0 4px;font-size:16px;color:var(--navy)}
+  .panel .hint{font-size:12.5px;color:var(--sub);margin:0 0 14px}
+  .capbox{border:2px dashed var(--blue-line);border-radius:12px;padding:22px;text-align:center;background:var(--blue-soft)}
+  .capbox .cam{font-size:34px}
+  .preview-wrap{position:relative;margin-bottom:12px;display:none}
+  .preview-wrap img{width:100%;border-radius:10px;border:1px solid var(--line)}
+  .ocrstatus{display:none;align-items:center;gap:10px;background:var(--blue-soft);border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--navy)}
+  .spinner{width:18px;height:18px;border:3px solid var(--blue-line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .bar{height:6px;background:var(--blue-line);border-radius:999px;overflow:hidden;flex:1}
+  .bar>i{display:block;height:100%;width:0;background:var(--blue);transition:width .2s}
+
+  /* form */
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .form .field{display:flex;flex-direction:column;gap:4px}
+  .form .field.full{grid-column:1 / -1}
+  .form label{font-size:12px;color:var(--sub);font-weight:600}
+  .form input,.form textarea,.form select{padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:15px;font-family:inherit;background:#fff;width:100%}
+  .form input:focus,.form textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+  .form textarea{resize:vertical;min-height:62px}
+  .form .filled{border-color:var(--blue);background:#fbfdff}
+
+  /* modal */
+  .modal{position:fixed;inset:0;z-index:60;display:none}
+  .modal.open{display:block}
+  .modal .scrim{position:absolute;inset:0;background:rgba(8,30,50,.45)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;top:0;background:var(--bg);overflow:auto;
+    max-width:920px;margin:0 auto}
+  .sheet .shead{position:sticky;top:0;background:linear-gradient(120deg,var(--navy),var(--blue));color:#fff;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px;display:flex;align-items:center;gap:10px;z-index:5}
+  .sheet .shead .x{margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer}
+  .sheet .sbody{padding:14px;max-width:920px;margin:0 auto}
+  .detail-photo{width:100%;border-radius:12px;border:1px solid var(--line);margin-bottom:12px;box-shadow:var(--shadow)}
+  .kv{display:grid;grid-template-columns:84px 1fr;gap:6px 12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .kv dt{font-size:12px;color:var(--sub);font-weight:600;align-self:center}
+  .kv dd{margin:0;font-size:15px;word-break:break-word}
+  .kv dd a{color:var(--blue);text-decoration:none}
+  .nm{font-size:21px;font-weight:800}
+  .timeline{list-style:none;margin:0;padding:0}
+  .timeline li{background:#fff;border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:8px;padding:9px 12px;margin-bottom:8px}
+  .timeline li .d{font-size:11.5px;color:var(--sub);display:flex;gap:8px;align-items:center}
+  .timeline li .t{font-size:14px;margin-top:2px;white-space:pre-wrap}
+  .logadd{display:flex;gap:8px;margin-bottom:14px}
+  .logadd input{flex:1;padding:10px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:14px}
+  .sec-title{font-size:13px;font-weight:700;color:var(--navy);margin:16px 2px 8px;display:flex;align-items:center;gap:7px}
+  .sec-title::before{content:"";width:4px;height:15px;background:var(--blue);border-radius:2px}
+
+  /* bottom nav */
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);
+    display:flex;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 12px rgba(0,40,80,.06)}
+  nav.tabbar button{flex:1;border:none;background:none;padding:9px 0 8px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--sub);font-family:inherit}
+  nav.tabbar button .ic{font-size:21px;line-height:1}
+  nav.tabbar button .lb{font-size:11px;font-weight:600}
+  nav.tabbar button.on{color:var(--blue)}
+  nav.tabbar button .badge{position:absolute;transform:translate(12px,-4px);background:var(--danger);color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--navy);color:#fff;
+    padding:11px 18px;border-radius:999px;font-size:14px;z-index:80;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .stat{display:flex;gap:10px;margin-bottom:14px}
+  .stat .box{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+  .stat .box b{display:block;font-size:24px;color:var(--navy)}
+  .stat .box span{font-size:11.5px;color:var(--sub)}
+  .stat .box.alert b{color:var(--danger)}
+  @media(max-width:520px){.form{grid-template-columns:1fr}.row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="logo">名刺管理ツール<small>FUJI AUTO INDUSTRY</small></div>
+  <div class="count" id="hdrCount">0 件</div>
+</header>
+
+<main>
+  <!-- ===== 一覧 ===== -->
+  <section class="view active" id="view-list">
+    <div class="searchbar">
+      <input id="q" type="search" placeholder="🔍 会社名・氏名・タグ・メモで検索" autocomplete="off">
+    </div>
+    <div class="tagrow" id="tagrow"></div>
+    <div class="cardlist" id="cardlist"></div>
+  </section>
+
+  <!-- ===== 追加 ===== -->
+  <section class="view" id="view-add">
+    <div class="panel">
+      <h2>📷 名刺を撮影して取り込み</h2>
+      <p class="hint">名刺を撮影すると、会社名・氏名・電話・メールなどを自動で読み取ります。読み取り後は内容を確認して直してください（OCRは下書きです）。</p>
+      <div class="capbox" id="capbox">
+        <div class="cam">📇</div>
+        <p style="margin:8px 0 14px;font-size:13px;color:var(--navy)">名刺の写真を撮る／選ぶ</p>
+        <button class="btn primary" id="btnCam">カメラ・写真から取り込む</button>
+        <input id="fileInput" type="file" accept="image/*" hidden>
+      </div>
+
+      <div class="ocrstatus" id="ocrstatus">
+        <span class="spinner"></span>
+        <div style="flex:1">
+          <div id="ocrmsg">文字を読み取っています…</div>
+          <div class="bar" style="margin-top:6px"><i id="ocrbar"></i></div>
+        </div>
+      </div>
+
+      <div class="preview-wrap" id="previewWrap">
+        <img id="preview" alt="名刺プレビュー">
+      </div>
+    </div>
+
+    <div class="panel" id="formPanel" style="display:none">
+      <h2 id="formTitle">読み取り結果を確認</h2>
+      <p class="hint">青く色が付いた欄は自動入力されたものです。必要に応じて直してください。</p>
+      <div class="form" id="cardForm"></div>
+      <div class="row2" style="margin-top:14px">
+        <button class="btn ghost" id="btnCancelForm">キャンセル</button>
+        <button class="btn primary" id="btnSaveCard">この名刺を保存</button>
+      </div>
+    </div>
+
+    <button class="btn sub full" id="btnManual" style="margin-top:2px">✏️ 写真なしで手入力する</button>
+  </section>
+
+  <!-- ===== フォロー ===== -->
+  <section class="view" id="view-follow">
+    <div class="stat" id="followStat"></div>
+    <div class="sec-title">フォローが必要な相手</div>
+    <div class="cardlist" id="followList"></div>
+  </section>
+
+  <!-- ===== データ ===== -->
+  <section class="view" id="view-data">
+    <div class="panel">
+      <h2>👤 取り込み担当者</h2>
+      <p class="hint">この端末で取り込んだ名刺に担当者名が記録されます。部下に取り込みを依頼する時に設定してください。</p>
+      <div class="field"><input id="capturer" placeholder="例：山田／三好店 佐藤"></div>
+    </div>
+
+    <div class="panel">
+      <h2>📤 書き出し（バックアップ・共有）</h2>
+      <p class="hint">部下が取り込んだ名刺を専務に渡す時は「バックアップを書き出す」を使い、ファイルを送ってください。専務側で「取り込んでマージ」すると自動で統合されます。</p>
+      <div class="row2" style="margin-bottom:10px">
+        <button class="btn navy" id="btnExportJson">💾 バックアップを書き出す</button>
+        <button class="btn ghost" id="btnImportJson">📥 取り込んでマージ</button>
+      </div>
+      <div class="row2">
+        <button class="btn ghost" id="btnExportCsv">📊 CSVで書き出す</button>
+        <button class="btn ghost" id="btnExportVcf">📇 vCard(連絡帳)で書き出す</button>
+      </div>
+      <input id="importInput" type="file" accept=".json,application/json" hidden>
+    </div>
+
+    <div class="panel">
+      <h2>⚙️ メンテナンス</h2>
+      <div class="row2">
+        <button class="btn sub" id="btnReindex">タグを再集計</button>
+        <button class="btn danger" id="btnWipe">全データを削除</button>
+      </div>
+      <p class="hint" style="margin:12px 0 0">データはこの端末のブラウザ内（IndexedDB）に保存されます。サーバーには送信されません。定期的にバックアップ書き出しをおすすめします。</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-go="list" class="on"><span class="ic">📋</span><span class="lb">一覧</span></button>
+  <button data-go="add"><span class="ic">➕</span><span class="lb">取り込み</span></button>
+  <button data-go="follow"><span class="ic" style="position:relative">🔔<span class="badge" id="followBadge" style="display:none">0</span></span><span class="lb">フォロー</span></button>
+  <button data-go="data"><span class="ic">⚙️</span><span class="lb">データ</span></button>
+</nav>
+
+<!-- detail modal -->
+<div class="modal" id="detailModal">
+  <div class="scrim" data-close></div>
+  <div class="sheet">
+    <div class="shead">
+      <div style="font-weight:800;font-size:16px" id="dTitle">名刺</div>
+      <button class="x" data-close>×</button>
+    </div>
+    <div class="sbody" id="detailBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Tesseract.js (ブラウザ内OCR・無料・APIキー不要) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+/* ============== PWA manifest（単一ファイルのまま install 対応） ============== */
+(function(){
+  const icon = 'data:image/svg+xml;base64,' + btoa(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192"><rect width="192" height="192" rx="34" fill="#0095D9"/><text x="96" y="128" font-size="100" text-anchor="middle" fill="#fff" font-family="sans-serif">📇</text></svg>');
+  const mani = {name:"名刺管理ツール",short_name:"名刺管理",start_url:".",display:"standalone",
+    background_color:"#f4f7fa",theme_color:"#0095D9",icons:[{src:icon,sizes:"192x192",type:"image/svg+xml"}]};
+  const link=document.createElement('link');link.rel='manifest';
+  link.href=URL.createObjectURL(new Blob([JSON.stringify(mani)],{type:'application/json'}));
+  document.head.appendChild(link);
+  const al=document.createElement('link');al.rel='apple-touch-icon';al.href=icon;document.head.appendChild(al);
+})();
+
+/* ============================ IndexedDB ============================ */
+const DB={_db:null,
+  open(){return new Promise((res,rej)=>{
+    const r=indexedDB.open('meishiDB',1);
+    r.onupgradeneeded=e=>{const d=e.target.result;
+      if(!d.objectStoreNames.contains('cards'))d.createObjectStore('cards',{keyPath:'id'});
+      if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'k'});};
+    r.onsuccess=e=>{this._db=e.target.result;res();};
+    r.onerror=e=>rej(e.target.error);});},
+  tx(store,mode){return this._db.transaction(store,mode).objectStore(store);},
+  all(){return new Promise((res)=>{const out=[];const c=this.tx('cards','readonly').openCursor();
+    c.onsuccess=e=>{const cur=e.target.result; if(cur){out.push(cur.value);cur.continue();}else res(out);};});},
+  put(card){return new Promise((res)=>{const r=this.tx('cards','readwrite').put(card);r.onsuccess=()=>res();});},
+  del(id){return new Promise((res)=>{const r=this.tx('cards','readwrite').delete(id);r.onsuccess=()=>res();});},
+  clear(){return new Promise((res)=>{const r=this.tx('cards','readwrite').clear();r.onsuccess=()=>res();});},
+  getMeta(k){return new Promise((res)=>{const r=this.tx('meta','readonly').get(k);r.onsuccess=()=>res(r.result?r.result.v:null);});},
+  setMeta(k,v){return new Promise((res)=>{const r=this.tx('meta','readwrite').put({k,v});r.onsuccess=()=>res();});}
+};
+
+/* ============================ state ============================ */
+let CARDS=[];        // in-memory
+let activeTag=null;
+let formPhoto=null;  // dataURL for the card being added/edited
+let editingId=null;
+const uid=()=> (crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random().toString(16).slice(2));
+const $=s=>document.querySelector(s);
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+
+/* ============================ OCR parse ============================ */
+function parseCard(text){
+  const raw=text.replace(/　/g,' ');
+  const lines=raw.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const r={company:'',dept:'',title:'',name:'',kana:'',tel:'',mobile:'',fax:'',email:'',zip:'',address:'',url:''};
+  const used=new Set();
+  const norm=s=>s.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+  // email
+  const em=raw.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/);
+  if(em)r.email=em[0];
+  // url
+  const u=raw.match(/(https?:\/\/[^\s]+|www\.[^\s]+|[A-Za-z0-9.\-]+\.(?:co\.jp|com|jp|net|or\.jp|biz))/);
+  if(u && !u[0].includes('@'))r.url=u[0];
+  // zip
+  const zip=raw.match(/〒?\s*(\d{3}\s*[-ー－]?\s*\d{4})/);
+  if(zip)r.zip='〒'+norm(zip[1]).replace(/\s/g,'').replace(/[ー－]/g,'-');
+  // phone numbers (collect all)
+  const phones=[];
+  norm(raw).replace(/(?:0\d{1,4}[-(]?\s?\d{1,4}[-)]?\s?\d{3,4})/g,m=>{phones.push(m.replace(/\s/g,''));return m;});
+  lines.forEach(l=>{
+    const ln=norm(l);
+    if(/(fax|ＦＡＸ|f\s*[:：])/i.test(l) && !r.fax){const p=ln.match(/0[\d\-()]{7,}/);if(p)r.fax=p[0];}
+    if(/(携帯|mobile|cell|m\s*[:：])/i.test(l) && !r.mobile){const p=ln.match(/0[\d\-()]{9,}/);if(p)r.mobile=p[0];}
+  });
+  phones.forEach(p=>{
+    const d=p.replace(/[^\d]/g,'');
+    if(/^0[789]0/.test(d)){ if(!r.mobile)r.mobile=p; }
+    else if(p!==r.fax && !r.tel){ r.tel=p; }
+  });
+  // company
+  const coRe=/(株式会社|有限会社|合同会社|合資会社|（株）|\(株\)|（有）|\(有\)|協同組合|工業|商事|製作所|自動車|ホールディングス|Corporation|Co\.,|Inc\.|Ltd)/;
+  for(let i=0;i<lines.length;i++){ if(coRe.test(lines[i])){ r.company=lines[i]; used.add(i); break; } }
+  // dept / title
+  const titleRe=/(代表取締役|取締役|専務|常務|社長|会長|部長|次長|課長|係長|主任|店長|工場長|所長|本部長|マネージャー|リーダー|主査|担当|代表|CEO|CFO|COO|Manager|Director|President)/;
+  const deptRe=/(部|課|室|営業所|支店|本部|事業部|センター|チーム|グループ)$/;
+  for(let i=0;i<lines.length;i++){
+    if(used.has(i))continue;
+    if(!r.title && titleRe.test(lines[i])){r.title=lines[i];used.add(i);}
+    else if(!r.dept && deptRe.test(lines[i]) && !coRe.test(lines[i])){r.dept=lines[i];used.add(i);}
+  }
+  // address (line with prefecture / 丁目 etc)
+  const addrRe=/(北海道|青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|東京|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|京都|大阪|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)(都|道|府|県)?|丁目|[0-9０-９]+[-－ー][0-9０-９]/;
+  for(let i=0;i<lines.length;i++){
+    if(used.has(i))continue;
+    if(addrRe.test(lines[i]) && !coRe.test(lines[i]) && lines[i].length>4){r.address=(r.address?r.address+' ':'')+lines[i];used.add(i);}
+  }
+  // kana
+  for(let i=0;i<lines.length;i++){
+    if(used.has(i))continue;
+    if(/^[ぁ-んゝ\s]{3,}$/.test(lines[i]) || /^[ァ-ヶー\s]{3,}$/.test(lines[i])){r.kana=lines[i];used.add(i);}
+  }
+  // name: a short remaining kanji line (2-5 chars incl space)
+  for(let i=0;i<lines.length;i++){
+    if(used.has(i))continue;
+    const l=lines[i];
+    if(/@|\d{3}|http|www|\.(co|com|jp)/.test(l))continue;
+    if(/^[一-龥々]{1,4}[\s　]?[一-龥々]{1,4}$/.test(l) && l.replace(/\s/g,'').length<=5 && l.replace(/\s/g,'').length>=2){
+      r.name=l;used.add(i);break;
+    }
+  }
+  if(!r.name){ // fallback: first unused short line
+    for(let i=0;i<lines.length;i++){ if(used.has(i))continue; const l=lines[i];
+      if(/@|\d{4}|http|www/.test(l))continue;
+      if(l.length<=10){r.name=l;break;} }
+  }
+  return r;
+}
+
+/* ============================ image compress ============================ */
+function fileToCompressed(file,max=1280,q=0.72){
+  return new Promise((res)=>{
+    const img=new Image();
+    img.onload=()=>{
+      let{width:w,height:h}=img;
+      if(w>h && w>max){h=h*max/w;w=max;} else if(h>=w && h>max){w=w*max/h;h=max;}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',q));
+    };
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+/* ============================ OCR flow ============================ */
+$('#btnCam').onclick=()=>$('#fileInput').click();
+$('#capbox').onclick=e=>{ if(e.target.id==='capbox') $('#fileInput').click(); };
+$('#fileInput').onchange=async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  e.target.value='';
+  const dataUrl=await fileToCompressed(f);
+  formPhoto=dataUrl;
+  $('#preview').src=dataUrl;
+  $('#previewWrap').style.display='block';
+  $('#formPanel').style.display='none';
+  runOCR(dataUrl);
+};
+async function runOCR(dataUrl){
+  const st=$('#ocrstatus'), bar=$('#ocrbar'), msg=$('#ocrmsg');
+  st.style.display='flex'; bar.style.width='5%'; msg.textContent='OCRエンジンを準備中…';
+  try{
+    const res=await Tesseract.recognize(dataUrl,'jpn+eng',{
+      logger:m=>{
+        if(m.status==='recognizing text'){bar.style.width=Math.round(m.progress*100)+'%';msg.textContent='文字を読み取っています… '+Math.round(m.progress*100)+'%';}
+        else if(m.status==='loading language traineddata'||m.status==='initializing'){msg.textContent='日本語データを読み込み中…';}
+      }
+    });
+    const parsed=parseCard(res.data.text||'');
+    openForm(parsed,res.data.text);
+    toast('読み取り完了。内容を確認してください');
+  }catch(err){
+    console.error(err);
+    toast('読み取りに失敗。手入力に切替えます');
+    openForm({},'' );
+  }finally{ st.style.display='none'; }
+}
+
+/* ============================ form ============================ */
+const FIELDS=[
+  ['company','会社名',true],['dept','部署',false],['title','役職',false],
+  ['name','氏名',true],['kana','ふりがな',false],
+  ['tel','電話',false],['mobile','携帯',false],['fax','FAX',false],
+  ['email','メール',false],['zip','郵便番号',false],['address','住所',true],
+  ['url','URL',false],['meetPlace','出会った場所',false],
+];
+function openForm(data,ocrText){
+  editingId=data.id||null;
+  if(data.photo)formPhoto=data.photo;
+  const wrap=$('#cardForm'); wrap.innerHTML='';
+  FIELDS.forEach(([k,label,full])=>{
+    const v=data[k]||'';
+    const div=document.createElement('div');
+    div.className='field'+(full?' full':'');
+    div.innerHTML=`<label>${label}</label>`+
+      (k==='address'? `<textarea data-k="${k}" class="${v?'filled':''}">${esc(v)}</textarea>`
+        : `<input data-k="${k}" value="${esc(v)}" class="${v?'filled':''}">`);
+    wrap.appendChild(div);
+  });
+  // tags + memo + meet/follow
+  const extra=document.createElement('div');extra.className='field full';
+  extra.innerHTML=`<label>タグ（カンマ区切り：例 商談,三好店,VIP）</label><input data-k="tags" value="${esc((data.tags||[]).join(','))}">`;
+  wrap.appendChild(extra);
+  const meet=document.createElement('div');meet.className='field';
+  meet.innerHTML=`<label>出会った日</label><input type="date" data-k="meetAt" value="${esc(data.meetAt||today())}">`;
+  wrap.appendChild(meet);
+  const fol=document.createElement('div');fol.className='field';
+  fol.innerHTML=`<label>次回フォロー予定</label><input type="date" data-k="followDate" value="${esc(data.followDate||'')}">`;
+  wrap.appendChild(fol);
+  const memo=document.createElement('div');memo.className='field full';
+  memo.innerHTML=`<label>メモ</label><textarea data-k="note">${esc(data.note||'')}</textarea>`;
+  wrap.appendChild(memo);
+
+  $('#formTitle').textContent=editingId?'名刺を編集':'読み取り結果を確認';
+  $('#formPanel').style.display='block';
+  $('#formPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function readForm(){
+  const o={};
+  $('#cardForm').querySelectorAll('[data-k]').forEach(el=>o[el.dataset.k]=el.value.trim());
+  o.tags=(o.tags||'').split(/[,、，]/).map(s=>s.trim()).filter(Boolean);
+  return o;
+}
+$('#btnSaveCard').onclick=async()=>{
+  const f=readForm();
+  if(!f.company && !f.name){toast('会社名か氏名を入力してください');return;}
+  let card;
+  if(editingId){ card=CARDS.find(c=>c.id===editingId)||{}; Object.assign(card,f); card.updatedAt=Date.now(); }
+  else{ card={id:uid(),...f,logs:[],followDone:false,createdAt:Date.now(),updatedAt:Date.now(),
+        capturedBy:$('#capturer').value.trim()||''}; }
+  if(formPhoto)card.photo=formPhoto;
+  await DB.put(card);
+  await load();
+  resetAdd();
+  toast(editingId?'更新しました':'保存しました ✓');
+  go('list');
+  editingId=null;
+};
+$('#btnCancelForm').onclick=resetAdd;
+$('#btnManual').onclick=()=>{ formPhoto=null; $('#previewWrap').style.display='none'; openForm({}); };
+function resetAdd(){
+  formPhoto=null; editingId=null;
+  $('#previewWrap').style.display='none';
+  $('#formPanel').style.display='none';
+  $('#ocrstatus').style.display='none';
+  $('#cardForm').innerHTML='';
+}
+
+/* ============================ list / search ============================ */
+function matches(c,q){
+  if(!q)return true;
+  const hay=[c.company,c.dept,c.title,c.name,c.kana,c.email,c.tel,c.mobile,c.address,c.note,(c.tags||[]).join(' '),
+    (c.logs||[]).map(l=>l.text).join(' ')].join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(t=>hay.includes(t));
+}
+function followState(c){
+  if(!c.followDate||c.followDone)return null;
+  const d=(new Date(c.followDate)-new Date(today()))/86400000;
+  if(d<0)return'over'; if(d<=7)return'soon'; return null;
+}
+function cardItem(c){
+  const initial=esc((c.name||c.company||'?').slice(0,1));
+  const thumb=c.photo?`<img class="thumb" src="${c.photo}">`:`<div class="thumb ph">${initial}</div>`;
+  const fs=followState(c);
+  const flag=fs?`<span class="flag ${fs}">${fs==='over'?'要フォロー':'まもなく'}</span>`:'';
+  const tags=(c.tags||[]).slice(0,3).map(t=>`<span>${esc(t)}</span>`).join('');
+  return `<div class="meishi" data-id="${c.id}">${thumb}
+    <div class="m-main">
+      <div class="m-name">${esc(c.name||'（氏名未入力）')}</div>
+      <div class="m-co">${esc([c.company,c.title].filter(Boolean).join(' / ')||'　')}</div>
+      <div class="m-tags">${tags}</div>
+    </div>${flag}</div>`;
+}
+function renderList(){
+  const q=$('#q').value.trim();
+  let list=CARDS.filter(c=>matches(c,q));
+  if(activeTag)list=list.filter(c=>(c.tags||[]).includes(activeTag));
+  list.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const el=$('#cardlist');
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><div class="big">📇</div>${CARDS.length?'該当する名刺がありません':'まだ名刺がありません。<br>「取り込み」から追加してください'}</div>`;
+  }else{
+    el.innerHTML=list.map(cardItem).join('');
+  }
+}
+function renderTags(){
+  const counts={};
+  CARDS.forEach(c=>(c.tags||[]).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const tags=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  const row=$('#tagrow');
+  if(!tags.length){row.innerHTML='';return;}
+  row.innerHTML=`<span class="chip ${!activeTag?'on':''}" data-tag="">すべて</span>`+
+    tags.map(t=>`<span class="chip ${activeTag===t?'on':''}" data-tag="${esc(t)}">${esc(t)} ${counts[t]}</span>`).join('');
+}
+$('#q').addEventListener('input',renderList);
+$('#tagrow').addEventListener('click',e=>{
+  const chip=e.target.closest('[data-tag]'); if(!chip)return;
+  activeTag=chip.dataset.tag||null; renderTags(); renderList();
+});
+$('#cardlist').addEventListener('click',e=>{
+  const it=e.target.closest('[data-id]'); if(it)openDetail(it.dataset.id);
+});
+$('#followList').addEventListener('click',e=>{
+  const it=e.target.closest('[data-id]'); if(it)openDetail(it.dataset.id);
+});
+
+/* ============================ detail ============================ */
+function openDetail(id){
+  const c=CARDS.find(x=>x.id===id); if(!c)return;
+  $('#dTitle').textContent=c.name||c.company||'名刺';
+  const link=(label,val,href)=> val?`<dt>${label}</dt><dd>${href?`<a href="${href}">${esc(val)}</a>`:esc(val)}</dd>`:'';
+  const fs=followState(c);
+  const folBadge=c.followDate?`<dt>次回フォロー</dt><dd>${esc(c.followDate)} ${c.followDone?'✅完了':(fs==='over'?'🔴 期限切れ':fs==='soon'?'🟡 まもなく':'')}
+     <button class="btn sub" style="padding:4px 10px;font-size:12px;margin-left:6px" data-fdone="${c.id}">${c.followDone?'未完了に戻す':'フォロー完了にする'}</button></dd>`:'';
+  const logs=(c.logs||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+    .map(l=>`<li><div class="d">🗓 ${esc(l.date)}</div><div class="t">${esc(l.text)}</div></li>`).join('')
+    || '<li style="border-left-color:var(--line);color:var(--sub)"><div class="t">まだ接点メモがありません</div></li>';
+  $('#detailBody').innerHTML=`
+    ${c.photo?`<img class="detail-photo" src="${c.photo}">`:''}
+    <div class="nm">${esc(c.name||'（氏名未入力）')} ${c.kana?`<span style="font-size:13px;color:var(--sub)">（${esc(c.kana)}）</span>`:''}</div>
+    <div style="color:var(--sub);margin:2px 0 12px">${esc([c.company,c.dept,c.title].filter(Boolean).join(' / '))}</div>
+    <dl class="kv">
+      ${link('会社',c.company)}${link('部署',c.dept)}${link('役職',c.title)}
+      ${link('電話',c.tel,'tel:'+(c.tel||'').replace(/[^\d+]/g,''))}
+      ${link('携帯',c.mobile,'tel:'+(c.mobile||'').replace(/[^\d+]/g,''))}
+      ${link('FAX',c.fax)}
+      ${link('メール',c.email,'mailto:'+c.email)}
+      ${link('郵便番号',c.zip)}${link('住所',c.address)}
+      ${link('URL',c.url,(c.url||'').startsWith('http')?c.url:'http://'+c.url)}
+      ${(c.tags||[]).length?`<dt>タグ</dt><dd>${(c.tags||[]).map(t=>`<span style="background:var(--blue-soft);color:var(--navy);padding:2px 9px;border-radius:999px;font-size:12px;margin-right:5px">${esc(t)}</span>`).join('')}</dd>`:''}
+      ${link('出会い',[c.meetAt,c.meetPlace].filter(Boolean).join(' '))}
+      ${folBadge}
+      ${c.capturedBy?`<dt>取込担当</dt><dd>${esc(c.capturedBy)}</dd>`:''}
+      ${c.note?`<dt>メモ</dt><dd style="white-space:pre-wrap">${esc(c.note)}</dd>`:''}
+    </dl>
+    <div class="sec-title">商談メモ・接点履歴</div>
+    <div class="logadd">
+      <input id="logText" placeholder="例：見積提出。来週返答待ち">
+      <button class="btn primary" data-logadd="${c.id}" style="padding:10px 14px">追加</button>
+    </div>
+    <ul class="timeline">${logs}</ul>
+    <div class="row2" style="margin-top:18px">
+      <button class="btn ghost" data-edit="${c.id}">✏️ 編集</button>
+      <button class="btn ghost" data-vcf="${c.id}">📇 vCard</button>
+    </div>
+    <button class="btn danger full" data-del="${c.id}" style="margin-top:10px">🗑 この名刺を削除</button>
+  `;
+  $('#detailModal').classList.add('open');
+}
+$('#detailModal').addEventListener('click',async e=>{
+  if(e.target.hasAttribute('data-close')){$('#detailModal').classList.remove('open');return;}
+  const t=e.target.closest('button'); if(!t)return;
+  if(t.dataset.logadd){
+    const txt=$('#logText').value.trim(); if(!txt)return;
+    const c=CARDS.find(x=>x.id===t.dataset.logadd);
+    c.logs=c.logs||[]; c.logs.push({date:today(),text:txt}); c.updatedAt=Date.now();
+    await DB.put(c); openDetail(c.id); toast('接点を記録しました');
+  }
+  if(t.dataset.fdone){
+    const c=CARDS.find(x=>x.id===t.dataset.fdone); c.followDone=!c.followDone; c.updatedAt=Date.now();
+    await DB.put(c); await load(); openDetail(c.id);
+  }
+  if(t.dataset.edit){
+    const c=CARDS.find(x=>x.id===t.dataset.edit);
+    $('#detailModal').classList.remove('open');
+    go('add'); formPhoto=c.photo||null;
+    if(c.photo){$('#preview').src=c.photo;$('#previewWrap').style.display='block';}
+    openForm(c);
+  }
+  if(t.dataset.vcf){ const c=CARDS.find(x=>x.id===t.dataset.vcf); downloadVcf([c],(c.name||c.company||'card')); }
+  if(t.dataset.del){
+    const c=CARDS.find(x=>x.id===t.dataset.del);
+    if(confirm(`「${c.name||c.company}」を削除しますか？`)){
+      await DB.del(c.id); await load(); $('#detailModal').classList.remove('open'); toast('削除しました');
+    }
+  }
+});
+
+/* ============================ follow view ============================ */
+function renderFollow(){
+  const over=CARDS.filter(c=>followState(c)==='over');
+  const soon=CARDS.filter(c=>followState(c)==='soon');
+  const done=CARDS.filter(c=>c.followDate&&c.followDone).length;
+  $('#followStat').innerHTML=`
+    <div class="box alert"><b>${over.length}</b><span>期限切れ</span></div>
+    <div class="box"><b>${soon.length}</b><span>7日以内</span></div>
+    <div class="box"><b>${done}</b><span>完了</span></div>`;
+  const list=[...over,...soon].sort((a,b)=>(a.followDate||'').localeCompare(b.followDate||''));
+  $('#followList').innerHTML=list.length?list.map(cardItem).join('')
+    :`<div class="empty"><div class="big">✅</div>フォロー予定の名刺はありません</div>`;
+  const n=over.length+soon.length, badge=$('#followBadge');
+  if(n){badge.style.display='flex';badge.textContent=n;}else badge.style.display='none';
+}
+
+/* ============================ export / import ============================ */
+function dl(name,content,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+}
+$('#btnExportJson').onclick=()=>{
+  const data={app:'meishi_kanri',version:1,exportedAt:new Date().toISOString(),
+    capturer:$('#capturer').value.trim(),cards:CARDS};
+  dl(`名刺バックアップ_${today()}.json`,JSON.stringify(data),'application/json');
+  toast(`${CARDS.length}件を書き出しました`);
+};
+function csvCell(s){s=(s==null?'':String(s)); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+$('#btnExportCsv').onclick=()=>{
+  const head=['会社名','部署','役職','氏名','ふりがな','電話','携帯','FAX','メール','郵便番号','住所','URL','タグ','メモ','出会った日','出会った場所','次回フォロー','取込担当'];
+  const rows=CARDS.map(c=>[c.company,c.dept,c.title,c.name,c.kana,c.tel,c.mobile,c.fax,c.email,c.zip,c.address,c.url,(c.tags||[]).join(' '),c.note,c.meetAt,c.meetPlace,c.followDate,c.capturedBy].map(csvCell).join(','));
+  const csv='﻿'+head.join(',')+'\n'+rows.join('\n'); // BOM for Excel/kintone
+  dl(`名刺一覧_${today()}.csv`,csv,'text/csv');
+  toast('CSVを書き出しました');
+};
+function vcardOf(c){
+  const n=(c.name||'').replace(/\s+/g,';');
+  return ['BEGIN:VCARD','VERSION:3.0',
+    `N:${n}`,`FN:${c.name||c.company||''}`,
+    c.kana?`X-PHONETIC-FIRST-NAME:${c.kana}`:'',
+    c.company?`ORG:${c.company}${c.dept?';'+c.dept:''}`:'',
+    c.title?`TITLE:${c.title}`:'',
+    c.tel?`TEL;TYPE=WORK,VOICE:${c.tel}`:'',
+    c.mobile?`TEL;TYPE=CELL:${c.mobile}`:'',
+    c.fax?`TEL;TYPE=FAX:${c.fax}`:'',
+    c.email?`EMAIL;TYPE=WORK:${c.email}`:'',
+    c.url?`URL:${c.url}`:'',
+    c.address?`ADR;TYPE=WORK:;;${c.address};;;;`:'',
+    c.note?`NOTE:${(c.note||'').replace(/\n/g,'\\n')}`:'',
+    'END:VCARD'].filter(Boolean).join('\r\n');
+}
+function downloadVcf(cards,name){ dl(`${name}.vcf`,cards.map(vcardOf).join('\r\n'),'text/vcard'); }
+$('#btnExportVcf').onclick=()=>{ if(!CARDS.length){toast('名刺がありません');return;} downloadVcf(CARDS,`名刺連絡帳_${today()}`); toast('vCardを書き出しました'); };
+
+$('#btnImportJson').onclick=()=>$('#importInput').click();
+$('#importInput').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return; e.target.value='';
+  const fr=new FileReader();
+  fr.onload=async()=>{
+    try{
+      const data=JSON.parse(fr.result);
+      const incoming=Array.isArray(data)?data:(data.cards||[]);
+      if(!incoming.length){toast('取り込めるデータがありません');return;}
+      const key=c=>((c.company||'')+'|'+(c.name||'')).replace(/\s/g,'').toLowerCase();
+      const map={}; CARDS.forEach(c=>map[key(c)]=c);
+      let added=0,merged=0;
+      for(const inc of incoming){
+        const ex=map[key(inc)];
+        if(ex && (inc.company||inc.name)){
+          // merge: fill empty fields, union logs, keep a photo
+          ['dept','title','kana','tel','mobile','fax','email','zip','address','url','note','meetAt','meetPlace','followDate','capturedBy'].forEach(k=>{ if(!ex[k]&&inc[k])ex[k]=inc[k]; });
+          if(!ex.photo&&inc.photo)ex.photo=inc.photo;
+          ex.tags=Array.from(new Set([...(ex.tags||[]),...(inc.tags||[])]));
+          const seen=new Set((ex.logs||[]).map(l=>l.date+'|'+l.text));
+          (inc.logs||[]).forEach(l=>{const s=l.date+'|'+l.text; if(!seen.has(s)){ex.logs=ex.logs||[];ex.logs.push(l);seen.add(s);}});
+          ex.updatedAt=Date.now(); await DB.put(ex); merged++;
+        }else{
+          const card={...inc,id:inc.id||uid()}; card.logs=card.logs||[];
+          await DB.put(card); map[key(card)]=card; added++;
+        }
+      }
+      await load();
+      toast(`取り込み完了：新規 ${added}件 / 統合 ${merged}件`);
+      go('list');
+    }catch(err){ console.error(err); toast('ファイルを読み込めませんでした'); }
+  };
+  fr.readAsText(f);
+};
+$('#btnReindex').onclick=()=>{renderTags();renderList();toast('タグを再集計しました');};
+$('#btnWipe').onclick=async()=>{
+  if(confirm('本当に全ての名刺データを削除しますか？（元に戻せません）\n先にバックアップ書き出しをおすすめします。')){
+    await DB.clear(); await load(); toast('全データを削除しました');
+  }
+};
+
+/* ============================ nav ============================ */
+function go(v){
+  document.querySelectorAll('.view').forEach(s=>s.classList.toggle('active',s.id==='view-'+v));
+  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.go===v));
+  if(v==='follow')renderFollow();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>go(b.dataset.go));
+
+/* ============================ load ============================ */
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+async function load(){
+  CARDS=await DB.all();
+  $('#hdrCount').textContent=CARDS.length+' 件';
+  renderTags(); renderList(); renderFollow();
+}
+(async()=>{
+  await DB.open();
+  const cap=await DB.getMeta('capturer'); if(cap)$('#capturer').value=cap;
+  $('#capturer').addEventListener('change',()=>DB.setMeta('capturer',$('#capturer').value.trim()));
+  await load();
+})();
+</script>
+</body>
+</html>
