@@ -168,7 +168,7 @@
   <section class="view" id="view-add">
     <div class="panel">
       <h2>📷 名刺を撮影して取り込み</h2>
-      <p class="hint">名刺を撮影すると、会社名・氏名・電話・メールなどを自動で読み取ります。読み取り後は内容を確認して直してください（OCRは下書きです）。</p>
+      <p class="hint" id="addHint">名刺を撮影すると、会社名・氏名・電話・メールなどを自動で読み取ります。読み取り後は内容を確認して直してください（OCRは下書きです）。</p>
       <div class="capbox" id="capbox">
         <div class="cam">📇</div>
         <p style="margin:8px 0 14px;font-size:13px;color:var(--navy)">名刺の写真を撮る／選ぶ</p>
@@ -215,6 +215,18 @@
       <h2>👤 取り込み担当者</h2>
       <p class="hint">この端末で取り込んだ名刺に担当者名が記録されます。部下に取り込みを依頼する時に設定してください。</p>
       <div class="field"><input id="capturer" placeholder="例：山田／三好店 佐藤"></div>
+    </div>
+
+    <div class="panel">
+      <h2>🚀 高精度OCR（無料・Google Gemini）</h2>
+      <p class="hint">無料のAPIキーを設定すると、AIが名刺を<b>抜群の精度</b>で読み取り、会社名・氏名・役職・連絡先まで自動入力します（未設定時は無料の簡易OCRで動作）。キーは<b>この端末内のみ</b>に保存され、公開ページには一切含まれません。</p>
+      <div class="field full"><label>Gemini APIキー</label><input id="geminiKey" type="password" placeholder="AIza... を貼り付け" autocomplete="off"></div>
+      <div class="row2" style="margin-top:10px">
+        <button class="btn navy" id="btnSaveKey">キーを保存</button>
+        <button class="btn ghost" id="btnTestKey">接続テスト</button>
+      </div>
+      <p class="hint" id="keyStatus" style="margin:10px 0 0"></p>
+      <p class="hint" style="margin:10px 0 0">取得方法：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue)">Google AI Studio</a> にGoogleアカウントでログイン →「Create API key」→ 表示された <code>AIza…</code> を上に貼り付け。<br>※無料枠は送信データがサービス改善に使われる場合があります。気になる場合は同画面で課金を有効にした有料キー（学習対象外）をご利用ください。</p>
     </div>
 
     <div class="panel">
@@ -309,6 +321,9 @@ let CARDS=[];        // in-memory
 let activeTag=null;
 let formPhoto=null;  // dataURL for the card being added/edited
 let editingId=null;
+let geminiKey='';    // AI高精度OCR用（端末内のみ保存）
+let geminiModel=null;// 自動検出したモデル名
+let _tw=null;        // Tesseractワーカー（再利用）
 const uid=()=> (crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random().toString(16).slice(2));
 const $=s=>document.querySelector(s);
 const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -403,31 +418,126 @@ $('#capbox').onclick=e=>{ if(e.target.id==='capbox') $('#fileInput').click(); };
 $('#fileInput').onchange=async e=>{
   const f=e.target.files[0]; if(!f)return;
   e.target.value='';
-  const dataUrl=await fileToCompressed(f);
-  formPhoto=dataUrl;
-  $('#preview').src=dataUrl;
+  const photo=await fileToCompressed(f,1100,0.72);  // 保存用（軽量）
+  const ocrImg=await fileToCompressed(f,1600,0.9);   // 読み取り用（高解像度）
+  formPhoto=photo;
+  $('#preview').src=photo;
   $('#previewWrap').style.display='block';
   $('#formPanel').style.display='none';
-  runOCR(dataUrl);
+  runOCR(ocrImg);
 };
-async function runOCR(dataUrl){
+async function runOCR(img){
   const st=$('#ocrstatus'), bar=$('#ocrbar'), msg=$('#ocrmsg');
-  st.style.display='flex'; bar.style.width='5%'; msg.textContent='OCRエンジンを準備中…';
+  st.style.display='flex'; bar.style.width='8%'; msg.textContent='読み取り準備中…';
+  // 1) AI高精度（Gemini）。キーがあれば最優先
+  if(geminiKey){
+    msg.textContent='🚀 AIで高精度読み取り中…'; bar.style.width='40%';
+    try{
+      const data=await geminiOCR(img);
+      bar.style.width='100%';
+      openForm(sanitizeOCR(data),'');
+      toast('AIで高精度読み取り完了 ✓');
+      st.style.display='none';
+      return;
+    }catch(err){
+      console.error('Gemini OCR failed',err);
+      toast('AI読取に失敗→無料OCRに切替');
+      // 続けてTesseractへ
+    }
+  }
+  // 2) 無料Tesseract（前処理強化＋日本語＋英語）
   try{
-    const res=await Tesseract.recognize(dataUrl,'jpn+eng',{
-      logger:m=>{
-        if(m.status==='recognizing text'){bar.style.width=Math.round(m.progress*100)+'%';msg.textContent='文字を読み取っています… '+Math.round(m.progress*100)+'%';}
-        else if(m.status==='loading language traineddata'||m.status==='initializing'){msg.textContent='日本語データを読み込み中…';}
-      }
-    });
-    const parsed=parseCard(res.data.text||'');
-    openForm(parsed,res.data.text);
+    msg.textContent=geminiKey?'無料OCRで読み取り中…':'文字を読み取っています…';
+    const text=await tesseractOCR(img);
+    openForm(parseCard(text||''),text);
     toast('読み取り完了。内容を確認してください');
   }catch(err){
     console.error(err);
     toast('読み取りに失敗。手入力に切替えます');
-    openForm({},'' );
+    openForm({});
   }finally{ st.style.display='none'; }
+}
+// 抽出結果を必要フィールドだけに整形
+function sanitizeOCR(d){
+  d=d||{};
+  const keys=['company','dept','title','name','kana','tel','mobile','fax','email','zip','address','url'];
+  const o={}; keys.forEach(k=>o[k]=(d[k]==null?'':String(d[k])).trim());
+  return o;
+}
+
+/* ---- AIビジョンOCR：Google Gemini（無料枠・端末内キー・ブラウザ直接呼び出し） ---- */
+async function pickGeminiModel(key){
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key));
+    if(r.ok){
+      const j=await r.json();
+      const cand=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')
+        && /flash/i.test(m.name) && !/embedding|aqa|image-generation|tts/i.test(m.name));
+      const score=m=>{let s=0;const n=m.name;const v=(n.match(/(\d+\.\d+)/)||[])[1];
+        if(v)s+=parseFloat(v)*10; if(!/lite/i.test(n))s+=3; if(!/thinking/i.test(n))s+=1; if(!/(exp|preview)/i.test(n))s+=2; return s;};
+      cand.sort((a,b)=>score(b)-score(a));
+      if(cand[0])return cand[0].name; // 例: "models/gemini-2.0-flash"
+    }
+  }catch(e){ console.warn('model list failed',e); }
+  return 'models/gemini-2.0-flash';
+}
+async function geminiOCR(dataUrl){
+  if(!geminiModel) geminiModel=await pickGeminiModel(geminiKey);
+  const b64=dataUrl.split(',')[1];
+  const mime=dataUrl.substring(5,dataUrl.indexOf(';'))||'image/jpeg';
+  const prompt='あなたは日本のビジネス名刺を読み取る高精度OCRエンジンです。画像の名刺から情報を抽出し、'
+    +'次のキーを持つJSONのみを出力してください（説明文やコードブロックは不要）：'
+    +'company, dept, title, name, kana, tel, mobile, fax, email, zip, address, url。\n'
+    +'ルール: 値はすべて文字列。書かれていない項目は空文字""。推測で補完しない。'
+    +'company=会社名（「株式会社」等の法人格も含む正式名称）、dept=部署、title=役職、name=氏名、kana=氏名のふりがな、'
+    +'tel=固定電話、mobile=携帯（070/080/090）、fax=FAX番号、email=メール、zip=郵便番号、address=住所、url=ホームページ。'
+    +'電話・携帯・FAXは必ず区別すること。';
+  const body={contents:[{parts:[{text:prompt},{inlineData:{mimeType:mime,data:b64}}]}],
+    generationConfig:{temperature:0,responseMimeType:'application/json'}};
+  const url='https://generativelanguage.googleapis.com/v1beta/'+geminiModel+':generateContent?key='+encodeURIComponent(geminiKey);
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){ const t=await r.text(); throw new Error('HTTP '+r.status+' '+t.slice(0,140)); }
+  const j=await r.json();
+  const txt=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||'').join('');
+  try{ return JSON.parse(txt); }catch(e){ const m=txt.match(/\{[\s\S]*\}/); if(m)return JSON.parse(m[0]); throw new Error('JSON解析失敗'); }
+}
+
+/* ---- 無料Tesseract（ワーカー再利用＋前処理＋ページ分割最適化） ---- */
+function preprocessForOCR(dataUrl){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0);
+      try{
+        const d=ctx.getImageData(0,0,c.width,c.height), a=d.data;
+        for(let i=0;i<a.length;i+=4){
+          let g=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2];
+          g=(g-128)*1.45+132;            // コントラスト強調
+          a[i]=a[i+1]=a[i+2]=g<0?0:g>255?255:g;
+        }
+        ctx.putImageData(d,0,0);
+      }catch(e){ /* getImageData不可時は原画像のまま */ }
+      res(c);
+    };
+    img.src=dataUrl;
+  });
+}
+async function getTesseractWorker(){
+  if(_tw)return _tw;
+  _tw=await Tesseract.createWorker('jpn+eng',1,{logger:m=>{
+    const bar=$('#ocrbar'), msg=$('#ocrmsg');
+    if(m.status==='recognizing text'){bar.style.width=Math.max(12,Math.round(m.progress*100))+'%';msg.textContent='文字を読み取っています… '+Math.round(m.progress*100)+'%';}
+    else if(/load|initial/i.test(m.status)){msg.textContent='日本語データを読み込み中…（初回のみ）';}
+  }});
+  await _tw.setParameters({preserve_interword_spaces:'1',tessedit_pageseg_mode:'3'});
+  return _tw;
+}
+async function tesseractOCR(img){
+  const w=await getTesseractWorker();
+  const pre=await preprocessForOCR(img);
+  const {data}=await w.recognize(pre);
+  return data.text;
 }
 
 /* ============================ form ============================ */
@@ -742,10 +852,45 @@ async function load(){
   $('#hdrCount').textContent=CARDS.length+' 件';
   renderTags(); renderList(); renderFollow();
 }
+/* ---- 高精度OCRキー管理 ---- */
+function updateKeyStatus(){
+  const el=$('#keyStatus'); const hint=$('#addHint');
+  if(geminiKey){
+    if(el){el.innerHTML='✅ キー設定済み — AI高精度OCRが有効です';el.style.color='var(--ok)';}
+    if(hint)hint.innerHTML='🚀 撮影するとAIが<b>高精度</b>で読み取り、会社名・氏名・役職・連絡先を自動入力します。結果は確認して直せます。';
+  }else{
+    if(el){el.innerHTML='— 未設定（無料の簡易OCRで動作中）';el.style.color='var(--sub)';}
+    if(hint)hint.innerHTML='現在は無料の簡易OCRです。精度を上げるには「データ」タブで<b>Geminiの無料APIキー</b>を設定してください。撮影後の内容は確認して直せます。';
+  }
+}
+async function testKey(){
+  const el=$('#keyStatus');
+  if(!geminiKey){toast('先にキーを入力して保存してください');return;}
+  el.innerHTML='接続テスト中…';el.style.color='var(--sub)';
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(geminiKey));
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    geminiModel=await pickGeminiModel(geminiKey);
+    el.innerHTML='✅ 接続OK（使用モデル: '+(geminiModel||'').replace('models/','')+'）';el.style.color='var(--ok)';
+    toast('接続OK ✓ AI高精度OCRが使えます');
+  }catch(e){
+    el.innerHTML='⚠️ 接続できません。キーをご確認ください（'+(e.message||'error')+'）';el.style.color='var(--danger)';
+    toast('接続失敗');
+  }
+}
 (async()=>{
   await DB.open();
   const cap=await DB.getMeta('capturer'); if(cap)$('#capturer').value=cap;
   $('#capturer').addEventListener('change',()=>DB.setMeta('capturer',$('#capturer').value.trim()));
+  geminiKey=(await DB.getMeta('geminiKey'))||'';
+  if(geminiKey)$('#geminiKey').value=geminiKey;
+  $('#btnSaveKey').onclick=async()=>{
+    geminiKey=$('#geminiKey').value.trim(); geminiModel=null;
+    await DB.setMeta('geminiKey',geminiKey); updateKeyStatus();
+    toast(geminiKey?'キーを保存しました ✓':'キーを消去しました');
+  };
+  $('#btnTestKey').onclick=testKey;
+  updateKeyStatus();
   await load();
 })();
 </script>
